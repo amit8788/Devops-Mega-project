@@ -12,15 +12,3 @@ public class DemoappApplication {
 }
 
 
-// public int divide(int a, int b) {
-//     return a / 0;   // ❌ Always crash
-// }
-
-
-// public void login() {
-//     System.out.println("Login");
-// }
-
-// public void loginCopy() {
-//     System.out.println("Login");
-// }
