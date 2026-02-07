@@ -11,6 +11,5 @@ class DemoappApplicationTests {
     @Test
     void contextLoads() {
         // Intentional failure for pipeline testing
-        assertEquals(1, 2);
     }
 }
