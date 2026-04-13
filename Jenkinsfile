@@ -39,12 +39,12 @@ pipeline{
 
         }
 
-        // stage("Test the application"){
-        //     steps {
-        //        sh "mvn test"
-        //     }
+        stage("Test the application"){
+           steps {
+              sh "mvn test"
+            }
 
-        // }
+       }
 
         stage("Sonarqube Analysis") {
             steps {
