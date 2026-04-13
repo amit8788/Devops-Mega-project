@@ -53,24 +53,23 @@ pipeline {
             }
         }
 
-        stage("Trivy Scan") {
-            steps {
-                script {
-                    sh """
-                    docker run --rm \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    aquasec/trivy image \
-                    ${IMAGE_NAME}:${IMAGE_TAG} \
-                    --no-progress \
-                    --scanners vuln \
-                    --exit-code 0 \
-                    --severity HIGH,CRITICAL \
-                    --format table
-                    """
-                }
-            }
+stage("Trivy Scan") {
+    steps {
+        script {
+            sh """
+            docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.49.1 \
+            image ${IMAGE_NAME}:${IMAGE_TAG} \
+            --no-progress \
+            --scanners vuln \
+            --exit-code 0 \
+            --severity HIGH,CRITICAL \
+            --format table
+            """
         }
-
+    }
+}
         stage("Push Docker Image") {
             steps {
                 script {
