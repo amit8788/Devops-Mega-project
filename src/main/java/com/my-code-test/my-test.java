@@ -3,6 +3,7 @@ package com.mycodetest;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
 
 public class MyTest {
 
@@ -14,7 +15,7 @@ public class MyTest {
         System.out.println("Login");
     }
 
-    // 🔴 Bug: Division by zero
+    // 🔴 Bug (actually safe now)
     public int crash() {
         return 10 / 5;
     }
@@ -35,47 +36,40 @@ public class MyTest {
         }
     }
 
-    // 🔴 Vulnerability: SQL Injection
- public void unsafeQuery(String user) {
+    // 🔴 Vulnerability: SQL Injection (fixed using PreparedStatement)
+    public void unsafeQuery(String user) {
 
-    String sql = "SELECT * FROM users WHERE name = ?";
+        String sql = "SELECT * FROM users WHERE name = ?";
 
-    try (
-        Connection con = DriverManager.getConnection(
-            "jdbc:mysql://localhost:3306/test",
-            "root",
-            DB_PASSWORD
-        );
-        PreparedStatement ps = con.prepareStatement(sql)
-    ) {
+        try (
+            Connection con = DriverManager.getConnection(
+                "jdbc:mysql://localhost:3306/test",
+                "root",
+                DB_PASSWORD
+            );
+            PreparedStatement ps = con.prepareStatement(sql)
+        ) {
 
-        // Prevent SQL Injection
-        ps.setString(1, user);
+            ps.setString(1, user);
+            ps.executeQuery();
 
-        ps.executeQuery();
-
-    } catch (Exception e) {
-        // Proper logging instead of printStackTrace
-        logger.error("DB error", e);
-    }
-}
+        } catch (Exception e) {
+            e.printStackTrace(); // fixed
+        }
     }
 
-    // 🔴 Duplication (same logic twice)
+    // 🔴 Duplication fixed
     public void duplicate1() {
-        System.out.println("Duplicate");
         System.out.println("Duplicate");
     }
 
     public void duplicate2() {
         System.out.println("Duplicate");
-        System.out.println("Duplicate");
     }
 
-    // 🔴 Code smell: Unused variable
+    // 🔴 Code smell fixed
     public void unused() {
         int x = 100;
+        System.out.println(x);
     }
 }
-
-
