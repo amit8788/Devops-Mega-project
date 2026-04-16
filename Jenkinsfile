@@ -24,7 +24,7 @@ pipeline {
             }
         }
 
-        stage("Checkout from SCM") {
+        stage("Checkout Code") {
             steps {
                 git branch: 'main',
                 credentialsId: 'github',
@@ -32,15 +32,39 @@ pipeline {
             }
         }
 
-        stage("Build the application") {
+        stage("Build Application") {
             steps {
                 sh "mvn clean package"
             }
         }
 
-        stage("Test the application") {
+        stage("Run Tests") {
             steps {
                 sh "mvn test"
+            }
+        }
+
+        stage("SonarQube Analysis") {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'jenkins-sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                        mvn sonar:sonar \
+                        -Dsonar.projectName=${APP_NAME} \
+                        -Dsonar.projectKey=${APP_NAME} \
+                        -Dsonar.host.url=http://13.49.158.75:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+
+        stage("Quality Gate") {
+            steps {
+                timeout(time: 3, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
+                }
             }
         }
 
@@ -53,49 +77,59 @@ pipeline {
             }
         }
 
-stage("Trivy Scan") {
-    steps {
-        script {
-            sh """
-            docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.49.1 \
-            image ${IMAGE_NAME}:${IMAGE_TAG} \
-            --no-progress \
-            --scanners vuln \
-            --exit-code 0 \
-            --severity HIGH,CRITICAL \
-            --format table
-            """
+        stage("Trivy Scan") {
+            steps {
+                script {
+                    sh """
+                    docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    aquasec/trivy:0.49.1 \
+                    image ${IMAGE_NAME}:${IMAGE_TAG} \
+                    --no-progress \
+                    --scanners vuln \
+                    --exit-code 1 \
+                    --severity CRITICAL \
+                    --format table
+                    """
+                }
+            }
         }
-    }
-}
+
         stage("Push Docker Image") {
             steps {
                 script {
                     docker.withRegistry('', DOCKER_PASS) {
-                        def dockerImage = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
-                        dockerImage.push()
-                        dockerImage.push("latest")
+                        def image = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
+                        image.push()
+                        image.push("latest")
                     }
                 }
             }
         }
 
-       stage("Trigger CD Pipeline") {
-    steps {
-        script {
-            sh """
-            curl -v -k --user admin:${JENKINS_API_TOKEN} \
-            -X POST \
-            -H 'cache-control: no-cache' \
-            -H 'content-type: application/x-www-form-urlencoded' \
-            --data 'IMAGE_TAG=${IMAGE_TAG}' \
-            'http://13.60.57.116:8080/job/gitops-devops-mega-project/buildWithParameters?token=gitops-token'
-            """
+        stage("Cleanup Images") {
+            steps {
+                script {
+                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                    sh "docker rmi ${IMAGE_NAME}:latest || true"
+                }
+            }
         }
-    }
-}
+
+        stage("Trigger CD Pipeline") {
+            steps {
+                script {
+                    sh """
+                    curl -v -k --user admin:${JENKINS_API_TOKEN} \
+                    -X POST \
+                    -H 'cache-control: no-cache' \
+                    -H 'content-type: application/x-www-form-urlencoded' \
+                    --data 'IMAGE_TAG=${IMAGE_TAG}' \
+                    'http://13.60.57.116:8080/job/gitops-devops-mega-project/buildWithParameters?token=gitops-token'
+                    """
+                }
+            }
+        }
     }
 
     post {
@@ -103,7 +137,7 @@ stage("Trivy Scan") {
             emailext (
                 to: 'amitsangale444@gmail.com',
                 subject: "SUCCESS: ${env.JOB_NAME} [${env.BUILD_NUMBER}]",
-                body: "Build Successful. Check: ${env.BUILD_URL}",
+                body: "Build Successful: ${env.BUILD_URL}",
                 mimeType: 'text/html'
             )
         }
@@ -112,7 +146,7 @@ stage("Trivy Scan") {
             emailext (
                 to: 'amitsangale444@gmail.com',
                 subject: "FAILURE: ${env.JOB_NAME} [${env.BUILD_NUMBER}]",
-                body: "Build Failed. Check: ${env.BUILD_URL}",
+                body: "Build Failed: ${env.BUILD_URL}",
                 mimeType: 'text/html'
             )
         }
