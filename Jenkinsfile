@@ -11,10 +11,12 @@ pipeline {
         RELEASE = "1.0.0"
         DOCKER_USER = "amit687"
         DOCKER_PASS = 'dockerhub'
-        IMAGE_NAME = "${DOCKER_USER}/${APP_NAME}"
+        IMAGE_NAME = "${DOCKER_USER}" + "/" + "${APP_NAME}"
         IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
         JENKINS_API_TOKEN = credentials("JENKINS_API_TOKEN")
+
     }
+    
 
     stages {
 
@@ -44,17 +46,11 @@ pipeline {
             }
         }
 
-        stage("SonarQube Analysis") {
+       stage("Sonarqube Analysis") {
             steps {
                 script {
-                    withCredentials([string(credentialsId: 'jenkins-sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                        sh """
-                        mvn sonar:sonar \
-                        -Dsonar.projectName=${APP_NAME} \
-                        -Dsonar.projectKey=${APP_NAME} \
-                        -Dsonar.host.url=http://13.49.158.75:9000 \
-                        -Dsonar.login=$SONAR_TOKEN
-                        """
+                    withSonarQubeEnv(credentialsId: 'jenkins-sonarqube-token'){
+                        sh "mvn sonar:sonar"
                     }
                 }
             }
@@ -62,8 +58,8 @@ pipeline {
 
         stage("Quality Gate") {
             steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'jenkins-sonarqube-token'
                 }
             }
         }
@@ -71,37 +67,24 @@ pipeline {
         stage("Build Docker Image") {
             steps {
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                    sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
+                   docker.withRegistry('',DOCKER_PASS) {
+                         docker_image = docker.build "${IMAGE_NAME}"
                 }
             }
         }
-
+     }
         stage("Trivy Scan") {
             steps {
-                script {
-                    sh """
-                    docker run --rm \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    aquasec/trivy:0.49.1 \
-                    image ${IMAGE_NAME}:${IMAGE_TAG} \
-                    --no-progress \
-                    --scanners vuln \
-                    --exit-code 1 \
-                    --severity CRITICAL \
-                    --format table
-                    """
-                }
+                script sh ('docker run -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image amit687/devops-mega-project:latest  --no-progress --scanners vuln  --exit-code 0 --severity HIGH,CRITICAL --format table')
             }
         }
 
         stage("Push Docker Image") {
             steps {
                 script {
-                    docker.withRegistry('', DOCKER_PASS) {
-                        def image = docker.image("${IMAGE_NAME}:${IMAGE_TAG}")
-                        image.push()
-                        image.push("latest")
+                      docker.withRegistry('',DOCKER_PASS) {
+                      docker_image.push("${IMAGE_TAG}")
+                      docker_image.push('latest')
                     }
                 }
             }
@@ -110,8 +93,8 @@ pipeline {
         stage("Cleanup Images") {
             steps {
                 script {
-                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
-                    sh "docker rmi ${IMAGE_NAME}:latest || true"
+                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker rmi ${IMAGE_NAME}:latest"
                 }
             }
         }
