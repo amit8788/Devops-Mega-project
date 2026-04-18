@@ -10,13 +10,10 @@ pipeline {
         APP_NAME = "devops-mega-project"
         RELEASE = "1.0.0"
         DOCKER_USER = "amit687"
-        DOCKER_PASS = 'dockerhub'
-        IMAGE_NAME = "${DOCKER_USER}" + "/" + "${APP_NAME}"
+        IMAGE_NAME = "${DOCKER_USER}/${APP_NAME}"
         IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
         JENKINS_API_TOKEN = credentials("JENKINS_API_TOKEN")
-
     }
-    
 
     stages {
 
@@ -46,10 +43,10 @@ pipeline {
             }
         }
 
-       stage("Sonarqube Analysis") {
+        stage("Sonarqube Analysis") {
             steps {
                 script {
-                    withSonarQubeEnv(credentialsId: 'jenkins-sonarqube-token'){
+                    withSonarQubeEnv('sonarqube-scanner') {
                         sh "mvn sonar:sonar"
                     }
                 }
@@ -59,7 +56,7 @@ pipeline {
         stage("Quality Gate") {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'jenkins-sonarqube-token'
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -67,36 +64,35 @@ pipeline {
         stage("Build Docker Image") {
             steps {
                 script {
-                   docker.withRegistry('',DOCKER_PASS) {
-                         docker_image = docker.build "${IMAGE_NAME}"
+                    docker_image = docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
                 }
             }
         }
-     }
-        stage("Trivy Scan") {
-    steps {
-        script {
-            sh """
-            docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.49.1 \
-            image ${IMAGE_NAME}:${IMAGE_TAG} \
-            --no-progress \
-            --scanners vuln \
-            --exit-code 0 \
-            --severity HIGH,CRITICAL \
-            --format table
-            """
+
+        stage("Trivy Scan (Before Push)") {
+            steps {
+                script {
+                    sh """
+                    docker run --rm \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    aquasec/trivy:0.49.1 \
+                    image ${IMAGE_NAME}:${IMAGE_TAG} \
+                    --no-progress \
+                    --scanners vuln \
+                    --exit-code 1 \
+                    --severity HIGH,CRITICAL \
+                    --format table
+                    """
+                }
+            }
         }
-    }
-}
 
         stage("Push Docker Image") {
             steps {
                 script {
-                      docker.withRegistry('',DOCKER_PASS) {
-                      docker_image.push("${IMAGE_TAG}")
-                      docker_image.push('latest')
+                    docker.withRegistry('', 'dockerhub') {
+                        docker_image.push("${IMAGE_TAG}")
+                        docker_image.push("latest")
                     }
                 }
             }
@@ -105,8 +101,8 @@ pipeline {
         stage("Cleanup Images") {
             steps {
                 script {
-                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG}"
-                    sh "docker rmi ${IMAGE_NAME}:latest"
+                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                    sh "docker rmi ${IMAGE_NAME}:latest || true"
                 }
             }
         }
