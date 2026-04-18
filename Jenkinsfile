@@ -108,7 +108,7 @@ pipeline {
                     -H 'cache-control: no-cache' \
                     -H 'content-type: application/x-www-form-urlencoded' \
                     --data 'IMAGE_TAG=${IMAGE_TAG}' \
-                    'http://13.60.57.116:8080/job/gitops-devops-mega-project/buildWithParameters?token=gitops-token'
+                    'http://16.170.240.185:8080/job/gitops-devops-mega-project/buildWithParameters?token=gitops-token'
                     """
                 }
             }
